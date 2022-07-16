@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+pragma solidity ^0.8.0;
+
+import "./interfaces/IRunicFactory.sol";
+import "./RunicPair.sol";
+
+contract RunicFactory is IRunicFactory {
+    bytes32 public constant PAIR_HASH = keccak256(type(RunicPair).creationCode);
+    address public override feeTo;
+    address public override feeToSetter;
+    bool public override paused;
+
+    mapping(address => mapping(address => address)) public override getPair;
+    address[] public override allPairs;
+
+    modifier whenNotPaused() {
+        require(!paused);
+        _;
+    }
+
+    modifier whenPaused() {
+        require(paused);
+        _;
+    }
+
+    constructor(address _feeToSetter) {
+        feeToSetter = _feeToSetter;
+    }
+
+    function allPairsLength() external view override returns (uint256) {
+        return allPairs.length;
+    }
+
+    function createPair(address tokenA, address tokenB) external override returns (address pair) {
+        require(tokenA != tokenB, "UniswapV2: IDENTICAL_ADDRESSES");
+        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        require(token0 != address(0), "UniswapV2: ZERO_ADDRESS");
+        require(getPair[token0][token1] == address(0), "UniswapV2: PAIR_EXISTS"); // single check is sufficient
+
+        pair = address(new RunicPair{salt: keccak256(abi.encodePacked(token0, token1))}());
+        IUniswapV2Pair(pair).initialize(token0, token1);
+        getPair[token0][token1] = pair;
+        getPair[token1][token0] = pair; // populate mapping in the reverse direction
+        allPairs.push(pair);
+        emit PairCreated(token0, token1, pair, allPairs.length);
+    }
+
+    function setFeeTo(address _feeTo) external override {
+        require(msg.sender == feeToSetter, "UniswapV2: FORBIDDEN");
+        feeTo = _feeTo;
+    }
+
+    function setFeeToSetter(address _feeToSetter) external override {
+        require(msg.sender == feeToSetter, "UniswapV2: FORBIDDEN");
+        feeToSetter = _feeToSetter;
+    }
+
+    function pause() external override whenNotPaused {
+        require(msg.sender == feeToSetter, "UniswapV2: FORBIDDEN");
+        paused = true;
+        emit Pause();
+    }
+
+    function unpause() external override whenPaused {
+        require(msg.sender == feeToSetter, "UniswapV2: FORBIDDEN");
+        paused = false;
+        emit Unpause();
+    }
+}
